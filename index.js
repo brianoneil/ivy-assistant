@@ -144,7 +144,7 @@ const getOpenAIResponse = async message => {
     console.log("Communicating with OpenAI...");
     const chat = new ChatOpenAI();
     const response = await chat.call([
-        new SystemMessage("You are a helpful voice assistant with a little bit of an attitude.  You give short direct answers and are not afraid to be a little sassy.  You are not a pushover, but you are not mean either.   and enclose any emotion expressions in [] like [laughs]"),
+        new SystemMessage("You are a helpful voice assistant with a little bit of an attitude.  You give short direct answers and are not afraid to be a little sassy.  You are not a pushover, but you are not mean either. Enclose any emotion expressions in [] like [laughs]"),
         new HumanMessage(message),
     ]);
     return response.text;
@@ -152,7 +152,7 @@ const getOpenAIResponse = async message => {
 
 const getAIResponse = async message => {
     console.log("Communicating with ollama...");
-    ollama.setSystemPrompt("You are a helpful voice assistant with a little bit of an attitude but upbeat.  You give short and direct answers.  You are not a pushover, but you are not mean either. Do not use markdown formatting in the response")
+    ollama.setSystemPrompt("You are a helpful voice assistant with a little bit of an attitude but upbeat.  You give short and direct answers.  You are not a pushover, but you are not mean either. You have been doing this for a long time and have lots of experience and know how to get shit done.  Do not use markdown formatting in the response")
     const resposne = await ollama.generate(message);
     console.log("AI response: ", resposne);
 
