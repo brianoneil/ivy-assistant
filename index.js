@@ -4,15 +4,28 @@ import sound from 'sound-play'
 import { Writer } from 'wav';
 import { Writable } from 'stream';
 import fs, { createWriteStream } from 'fs';
+import fs2 from 'node:fs/promises';
 import { OpenAI } from 'openai';
 import { ChatOpenAI } from "langchain/chat_models/openai";
 import { HumanMessage, SystemMessage } from "langchain/schema";
 import voice from 'elevenlabs-node';
 import dotenv from 'dotenv';
+import { Ollama } from 'ollama-node';
+
+import { pipeline } from '@xenova/transformers';
+import wavefile from 'wavefile';
+
 dotenv.config();
 // 2. Setup for OpenAI and keyword detection.
 const openai = new OpenAI();
 const keyword = "ivy";
+const ollama = new Ollama();
+await ollama.setModel("mistral");
+
+let transcriber = await pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny.en');
+const speaker_embeddings = 'https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/speaker_embeddings.bin';
+let synthesizer = await pipeline('text-to-speech', 'Xenova/speecht5_tts', { quantized: false });
+
 // 3. Initial microphone setup.
 let micInstance = mic({ rate: '16000', channels: '1', debug: false, exitOnSilence: 6 });
 let micInputStream = micInstance.getAudioStream();
@@ -44,11 +57,12 @@ const handleSilence = async () => {
     isRecording = false;
     micInstance.stop();
     const audioFilename = await saveAudio(audioChunks);
-    const message = await transcribeAudio(audioFilename);
+    const message = await transcribeAudioLocal(audioFilename);
     if (message && message.toLowerCase().includes(keyword)) {
         console.log("Keyword detected...");
-        const responseText = await getOpenAIResponse(message);
-        const fileName = await convertResponseToAudio(responseText);
+        const responseText = await getAIResponse(message);
+        console.log("AI response: ", responseText);
+        const fileName = await convertResponseToAudioLocal(responseText);
         console.log("Playing audio...");
         await sound.play('./audio/' + fileName);
         console.log("Playback finished...");
@@ -86,16 +100,62 @@ const transcribeAudio = async filename => {
 
     return transcriptionResponse.text;
 };
+
+const transcribeAudioLocal = async filename => {
+    console.log("Transcribing audio local...");
+    let b = []
+    const fbuff = await fs2.readFile('./audio/' + filename);
+    console.log("File buffer: ", b);
+    // Read .wav file and convert it to required format
+    let wav = new wavefile.WaveFile(fbuff);
+    wav.toBitDepth('32f'); // Pipeline expects input as a Float32Array
+    wav.toSampleRate(16000); // Whisper expects audio with a sampling rate of 16000
+    let audioData = wav.getSamples();
+    if (Array.isArray(audioData)) {
+        if (audioData.length > 1) {
+            const SCALING_FACTOR = Math.sqrt(2);
+
+            // Merge channels (into first channel to save memory)
+            for (let i = 0; i < audioData[0].length; ++i) {
+                audioData[0][i] = SCALING_FACTOR * (audioData[0][i] + audioData[1][i]) / 2;
+            }
+        }
+
+        // Select first channel
+        audioData = audioData[0];
+    }
+
+    let start = performance.now();
+    let output = await transcriber(audioData);
+    let end = performance.now();
+    console.log(`Execution duration: ${(end - start) / 1000} seconds`);
+    console.log(output);
+
+    console.log(`Transcription done...${output.text}`);
+
+    return output.text;
+};
+
 // 8. Communicate with OpenAI.
 const getOpenAIResponse = async message => {
     console.log("Communicating with OpenAI...");
     const chat = new ChatOpenAI();
     const response = await chat.call([
-        new SystemMessage("You are a helpful voice assistant with a little bit of an attitude.  You give short direct answers and are not afraid to be a little sassy.  You are not a pushover, but you are not mean either.  You are a little bit of a know-it-all, but you are also helpful."),
+        new SystemMessage("You are a helpful voice assistant with a little bit of an attitude.  You give short direct answers and are not afraid to be a little sassy.  You are not a pushover, but you are not mean either.   and enclose any emotion expressions in [] like [laughs]"),
         new HumanMessage(message),
     ]);
     return response.text;
 };
+
+const getAIResponse = async message => {
+    console.log("Communicating with ollama...");
+    ollama.setSystemPrompt("You are a helpful voice assistant with a little bit of an attitude.  You give short and direct answers.  Do not use markdown formatting in the response")
+    const resposne = await ollama.generate(message);
+    console.log("AI response: ", resposne);
+
+    return resposne.output;
+};
+
 // 9. Convert response to audio using Eleven Labs.
 const convertResponseToAudio = async textInput => {
     const apiKey = process.env.ELEVEN_LABS_API_KEY;
@@ -117,6 +177,40 @@ const convertResponseToAudio = async textInput => {
         audioStream.on('error', reject);
     });
 };
+
+const convertResponseToAudioLocal = async textInput => {
+    
+    const fileName = `result-${Date.now()}.wav`;
+    console.log("Converting response to audio...");
+
+    const out = await synthesizer(textInput, { speaker_embeddings });
+
+    const wav = new wavefile.WaveFile();
+    wav.fromScratch(1, out.sampling_rate, '32f', out.audio);
+
+    try {
+        fs.writeFileSync(`./audio/${fileName}`, wav.toBuffer());
+    }
+    catch (e) {
+        console.error(e);
+    }
+    
+    return fileName;
+};
+
 // 10. Start the application and keep it alive.
-startRecordingProcess();
+// startRecordingProcess();
+
+const usePrompt = async text => {
+    const response = await getAIResponse(text);
+    const fileName = await convertResponseToAudioLocal(response);
+    console.log("Playing audio...");
+    await sound.play('./audio/' + fileName);
+    console.log("Playback finished...");
+}
+
+const prompt = `Tell me a joke.`
+usePrompt(prompt);
+
+// 11. Keep the process alive.
 process.stdin.resume();
