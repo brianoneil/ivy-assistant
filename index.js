@@ -152,7 +152,7 @@ const getOpenAIResponse = async message => {
 
 const getAIResponse = async message => {
     console.log("Communicating with ollama...");
-    ollama.setSystemPrompt("You are a helpful voice assistant with a little bit of an attitude.  You give short and direct answers.  Do not use markdown formatting in the response")
+    ollama.setSystemPrompt("You are a helpful voice assistant with a little bit of an attitude but upbeat.  You give short and direct answers.  You are not a pushover, but you are not mean either. Do not use markdown formatting in the response")
     const resposne = await ollama.generate(message);
     console.log("AI response: ", resposne);
 
@@ -201,8 +201,7 @@ const convertResponseToAudioLocal = async textInput => {
     return fileName;
 };
 
-// 10. Start the application and keep it alive.
-// startRecordingProcess();
+
 
 const usePrompt = async text => {
     const response = await getAIResponse(text);
@@ -233,7 +232,9 @@ const imagePrompt = async (text) => {
 
 const prompt = `tell me a dad joke`;
 // usePrompt(prompt);
+// 10. Start the application and keep it alive.
+startRecordingProcess();
 
-imagePrompt();
+// imagePrompt();
 // 11. Keep the process alive.
 process.stdin.resume();
