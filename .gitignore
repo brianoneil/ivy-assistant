@@ -1,3 +1,4 @@
 audio/
 node_modules/
 .env
+.cache/

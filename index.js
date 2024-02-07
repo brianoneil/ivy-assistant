@@ -15,6 +15,9 @@ import { Ollama } from 'ollama-node';
 import { pipeline } from '@xenova/transformers';
 import wavefile from 'wavefile';
 
+import { DiffusionPipeline } from '@aislamov/diffusers.js'
+import { PNG } from 'pngjs'
+
 dotenv.config();
 // 2. Setup for OpenAI and keyword detection.
 const openai = new OpenAI();
@@ -209,8 +212,28 @@ const usePrompt = async text => {
     console.log("Playback finished...");
 }
 
-const prompt = `Tell me a joke.`
-usePrompt(prompt);
+const imagePrompt = async (text) => {
+    const pipe = await DiffusionPipeline.fromPretrained('aislamov/stable-diffusion-2-1-base-onnx', { revision: 'cpu' })
+    console.log('pipe', {pipe})
+    
+    const images = await pipe.run({
+        prompt: "an abstract horse illustration",
+        numInferenceSteps: 30,
+    })
 
+    console.log('images', {images})
+    // const data = await images[0].mul(255).round().clipByValue(0, 255).transpose(0, 2, 3, 1)
+
+    // const p = new PNG({ width: 512, height: 512, inputColorType: 2 })
+    // p.data = Buffer.from(data.data)
+    // p.pack().pipe(fs.createWriteStream('output.png')).on('finish', () => {
+    //     console.log('Image saved as output.png');
+    // })
+}
+
+const prompt = `tell me a dad joke`;
+// usePrompt(prompt);
+
+imagePrompt();
 // 11. Keep the process alive.
 process.stdin.resume();
