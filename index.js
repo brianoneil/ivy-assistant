@@ -17,13 +17,17 @@ import wavefile from 'wavefile';
 
 import { DiffusionPipeline } from '@aislamov/diffusers.js'
 import { PNG } from 'pngjs'
+import { get } from 'http';
+
+
+const runLocal = true;
 
 dotenv.config();
 // 2. Setup for OpenAI and keyword detection.
 const openai = new OpenAI();
 const keyword = "ivy";
 const ollama = new Ollama();
-await ollama.setModel("mistral");
+await ollama.setModel("llama2");
 
 let transcriber = await pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny.en');
 const speaker_embeddings = 'https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/speaker_embeddings.bin';
@@ -60,12 +64,12 @@ const handleSilence = async () => {
     isRecording = false;
     micInstance.stop();
     const audioFilename = await saveAudio(audioChunks);
-    const message = await transcribeAudioLocal(audioFilename);
+    const message = await transcribeAudio(audioFilename);
     if (message && message.toLowerCase().includes(keyword)) {
         console.log("Keyword detected...");
         const responseText = await getAIResponse(message);
         console.log("AI response: ", responseText);
-        const fileName = await convertResponseToAudioLocal(responseText);
+        const fileName = await convertResponseToAudio(responseText);
         console.log("Playing audio...");
         await sound.play('./audio/' + fileName);
         console.log("Playback finished...");
@@ -90,8 +94,10 @@ const saveAudio = async audioChunks => {
         wavWriter.end(audioBuffer);
     });
 };
+
+
 // 7. Transcribe audio.
-const transcribeAudio = async filename => {
+const transcribeAudioOpenAI = async filename => {
     console.log("Transcribing audio...");
     const audioFile = fs.createReadStream('./audio/' + filename);
     const transcriptionResponse = await openai.audio.transcriptions.create({
@@ -139,6 +145,10 @@ const transcribeAudioLocal = async filename => {
     return output.text;
 };
 
+const transcribeAudio = runLocal ? transcribeAudioLocal : transcribeAudioOpenAI;
+
+
+
 // 8. Communicate with OpenAI.
 const getOpenAIResponse = async message => {
     console.log("Communicating with OpenAI...");
@@ -150,17 +160,20 @@ const getOpenAIResponse = async message => {
     return response.text;
 };
 
-const getAIResponse = async message => {
+const getOllamaAIResponse = async message => {
     console.log("Communicating with ollama...");
-    ollama.setSystemPrompt("You are a helpful voice assistant with a little bit of an attitude but upbeat.  You give short and direct answers.  You are not a pushover, but you are not mean either. You have been doing this for a long time and have lots of experience and know how to get shit done.  Do not use markdown formatting in the response")
+    ollama.setSystemPrompt("You are a voice assistant with a little bit of an attitude but upbeat and always helpful and ready with a good answer.  You give short and direct answers.  Do not use markdown formatting in the response and don't include emotion instructions in response like *nods* or *laughs*.")
     const resposne = await ollama.generate(message);
-    console.log("AI response: ", resposne);
+    console.log("AI response: ", resposne.output);
 
     return resposne.output;
 };
 
+const getAIResponse = runLocal ? getOllamaAIResponse : getOpenAIResponse;
+
+
 // 9. Convert response to audio using Eleven Labs.
-const convertResponseToAudio = async textInput => {
+const convertResponseToAudioElevenLabs = async textInput => {
     const apiKey = process.env.ELEVEN_LABS_API_KEY;
     const voiceId = "XrExE9yKIg1WjnnlVkGX";
     const fileName = `${Date.now()}.mp3`;
@@ -201,11 +214,12 @@ const convertResponseToAudioLocal = async textInput => {
     return fileName;
 };
 
+const convertResponseToAudio = runLocal ? convertResponseToAudioLocal : convertResponseToAudioElevenLabs;
 
 
 const usePrompt = async text => {
     const response = await getAIResponse(text);
-    const fileName = await convertResponseToAudioLocal(response);
+    const fileName = await convertResponseToAudio(response);
     console.log("Playing audio...");
     await sound.play('./audio/' + fileName);
     console.log("Playback finished...");
@@ -230,10 +244,10 @@ const imagePrompt = async (text) => {
     // })
 }
 
-const prompt = `tell me a dad joke`;
-// usePrompt(prompt);
+const prompt = `give me a short summary of the book "The Great Gatsby" by F. Scott Fitzgerald.`;
+usePrompt(prompt);
 // 10. Start the application and keep it alive.
-startRecordingProcess();
+// startRecordingProcess();
 
 // imagePrompt();
 // 11. Keep the process alive.
