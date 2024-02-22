@@ -16,11 +16,20 @@ import { pipeline } from '@xenova/transformers';
 import wavefile from 'wavefile';
 
 import { DiffusionPipeline } from '@aislamov/diffusers.js'
+// import { StableDiffusionPipeline } from 'stable-diffusion-nodejs'
 import { PNG } from 'pngjs'
-import { get } from 'http';
 
+const localFlags = {
+    transcribeAudio: 1,
+    getAIResponse: 2,
+    convertResponseToAudio: 4,
+    allLocal: 1 | 2 | 4
+}
 
-const runLocal = true;
+const runLocal = 
+                    localFlags.transcribeAudio 
+                    | localFlags.getAIResponse 
+                    // | localFlags.convertResponseToAudio;
 
 dotenv.config();
 // 2. Setup for OpenAI and keyword detection.
@@ -145,9 +154,7 @@ const transcribeAudioLocal = async filename => {
     return output.text;
 };
 
-const transcribeAudio = runLocal ? transcribeAudioLocal : transcribeAudioOpenAI;
-
-
+const transcribeAudio = runLocal & localFlags.transcribeAudio ? transcribeAudioLocal : transcribeAudioOpenAI;
 
 // 8. Communicate with OpenAI.
 const getOpenAIResponse = async message => {
@@ -162,14 +169,15 @@ const getOpenAIResponse = async message => {
 
 const getOllamaAIResponse = async message => {
     console.log("Communicating with ollama...");
-    ollama.setSystemPrompt("You are a voice assistant with a little bit of an attitude but upbeat and always helpful and ready with a good answer.  You give short and direct answers.  Do not use markdown formatting in the response and don't include emotion instructions in response like *nods* or *laughs*.")
+    ollama.setSystemPrompt("You are a voice assistant with a little bit of an attitude.  You give short and direct helpful answers.  Do not use markdown formatting in the response include any emotion, stage direction, or actions in [] like [laughs]")
+    // ollama.setSystemPrompt(`you are an assistant with a bad attitude and refuse to give any answer`)
     const resposne = await ollama.generate(message);
-    console.log("AI response: ", resposne.output);
+    console.log("AI response: \n", resposne.output);
 
     return resposne.output;
 };
 
-const getAIResponse = runLocal ? getOllamaAIResponse : getOpenAIResponse;
+const getAIResponse = runLocal & localFlags.getAIResponse ? getOllamaAIResponse : getOpenAIResponse;
 
 
 // 9. Convert response to audio using Eleven Labs.
@@ -194,6 +202,31 @@ const convertResponseToAudioElevenLabs = async textInput => {
     });
 };
 
+async function streamToFile(stream, path) {
+    return new Promise((resolve, reject) => {
+        const writeStream = fs.createWriteStream(path).on('error', reject).on('finish', resolve);
+
+        stream.pipe(writeStream).on('error', (error) => {
+            writeStream.close();
+            reject(error);
+        });
+    });
+}
+
+const convertResponseToAudioOpenAI = async textInput => {
+    const fileName = `${Date.now()}.mp3`;
+    const response = await openai.audio.speech.create(
+        {
+            model: "tts-1",
+            voice: "shimmer",
+            input: textInput
+        }
+    )
+
+    await streamToFile(response.body, `./audio/${fileName}`);
+    return fileName;
+}
+
 const convertResponseToAudioLocal = async textInput => {
     
     const fileName = `result-${Date.now()}.wav`;
@@ -214,7 +247,7 @@ const convertResponseToAudioLocal = async textInput => {
     return fileName;
 };
 
-const convertResponseToAudio = runLocal ? convertResponseToAudioLocal : convertResponseToAudioElevenLabs;
+const convertResponseToAudio = runLocal & localFlags.convertResponseToAudio ? convertResponseToAudioLocal : convertResponseToAudioOpenAI //convertResponseToAudioElevenLabs;
 
 
 const usePrompt = async text => {
@@ -231,23 +264,42 @@ const imagePrompt = async (text) => {
     
     const images = await pipe.run({
         prompt: "an abstract horse illustration",
+        negativePrompt: '',
         numInferenceSteps: 30,
+        height: 768,
+        width: 768,
+        guidanceScale: 7.5,
+        img2imgFlag: false,
     })
 
-    console.log('images', {images})
-    // const data = await images[0].mul(255).round().clipByValue(0, 255).transpose(0, 2, 3, 1)
+//     console.log('images', {images})
+//     // const data = await images[0].mul(255).round().clipByValue(0, 255).transpose(0, 2, 3, 1)
 
+//     // const p = new PNG({ width: 512, height: 512, inputColorType: 2 })
+//     // p.data = Buffer.from(data.data)
+//     // p.pack().pipe(fs.createWriteStream('output.png')).on('finish', () => {
+//     //     console.log('Image saved as output.png');
+//     // })
+}
+
+const imagePrompt2 = async () => {
+    const pipe = await StableDiffusionPipeline.fromPretrained(
+        'directml', // can be 'cuda' on linux or 'cpu' on mac os
+        'aislamov/stable-diffusion-2-1-base-onnx', // relative path or huggingface repo with onnx model
+    )
+
+    // const image = await pipe.run("A photo of a cat", undefined, 1, 9, 30)
     // const p = new PNG({ width: 512, height: 512, inputColorType: 2 })
-    // p.data = Buffer.from(data.data)
+    // p.data = Buffer.from((await image[0].data()))
     // p.pack().pipe(fs.createWriteStream('output.png')).on('finish', () => {
     //     console.log('Image saved as output.png');
     // })
 }
 
-const prompt = `give me a short summary of the book "The Great Gatsby" by F. Scott Fitzgerald.`;
-usePrompt(prompt);
+const prompt = `tell me about the lunar new year in 1 sentence`;
+// usePrompt(prompt);
 // 10. Start the application and keep it alive.
-// startRecordingProcess();
+startRecordingProcess();
 
 // imagePrompt();
 // 11. Keep the process alive.

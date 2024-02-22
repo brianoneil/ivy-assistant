@@ -13,6 +13,7 @@
   "license": "ISC",
   "dependencies": {
     "@aislamov/diffusers.js": "^0.9.3",
+    "@tensorflow/tfjs-node": "^4.17.0",
     "@xenova/transformers": "^2.15.0",
     "dotenv": "^16.4.1",
     "elevenlabs-node": "^2.0.3",
@@ -23,6 +24,7 @@
     "pngjs": "^7.0.0",
     "prompt-sync": "^4.2.0",
     "sound-play": "^1.1.0",
+    "stable-diffusion-nodejs": "^1.0.5",
     "stream": "^0.0.2",
     "wav": "^1.0.2",
     "wavefile": "^11.0.0"
