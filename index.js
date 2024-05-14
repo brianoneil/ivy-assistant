@@ -36,7 +36,7 @@ dotenv.config();
 const openai = new OpenAI();
 const keyword = "ivy";
 const ollama = new Ollama();
-await ollama.setModel("llama2");
+await ollama.setModel("llama3");
 
 let transcriber = await pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny.en');
 const speaker_embeddings = 'https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/speaker_embeddings.bin';
@@ -74,6 +74,9 @@ const handleSilence = async () => {
     micInstance.stop();
     const audioFilename = await saveAudio(audioChunks);
     const message = await transcribeAudio(audioFilename);
+
+    fs.unlinkSync('./audio/' +  audioFilename);
+
     if (message && message.toLowerCase().includes(keyword)) {
         console.log("Keyword detected...");
         const responseText = await getAIResponse(message);
@@ -162,6 +165,7 @@ const getOpenAIResponse = async message => {
     const chat = new ChatOpenAI();
     const response = await chat.call([
         new SystemMessage("You are a helpful voice assistant with a little bit of an attitude.  You give short direct answers and are not afraid to be a little sassy.  You are not a pushover, but you are not mean either. Enclose any emotion expressions in [] like [laughs]"),
+        // new SystemMessage(`You're a frontend web developer that specializes in tailwindcss. Given a description or an image, generate HTML with tailwindcss. You should support both dark and light mode. It should render nicely on desktop, tablet, and mobile. Keep your responses concise and just return HTML that would appear in the <body> no need for <head>. Use placehold.co for placeholder images. If the user asks for interactivity, use modern ES6 javascript and native browser apis to handle events`),
         new HumanMessage(message),
     ]);
     return response.text;
@@ -169,8 +173,8 @@ const getOpenAIResponse = async message => {
 
 const getOllamaAIResponse = async message => {
     console.log("Communicating with ollama...");
-    ollama.setSystemPrompt("You are a voice assistant with a little bit of an attitude.  You give short and direct helpful answers.  Do not use markdown formatting in the response include any emotion, stage direction, or actions in [] like [laughs]")
-    // ollama.setSystemPrompt(`you are an assistant with a bad attitude and refuse to give any answer`)
+    // ollama.setSystemPrompt("You are a voice assistant with a little bit of an attitude.  You give short and direct helpful answers.  Do not use markdown formatting in the response include any emotion, stage direction, or actions in [] like [laughs]")
+    ollama.setSystemPrompt(`You're a frontend web developer that specializes in tailwindcss. Given a description or an image, generate HTML with tailwindcss. You should support both dark and light mode. It should render nicely on desktop, tablet, and mobile. Keep your responses concise and just return HTML that would appear in the <body> no need for <head>. Use placehold.co for placeholder images. If the user asks for interactivity, use modern ES6 javascript and native browser apis to handle events`)
     const resposne = await ollama.generate(message);
     console.log("AI response: \n", resposne.output);
 
@@ -183,7 +187,7 @@ const getAIResponse = runLocal & localFlags.getAIResponse ? getOllamaAIResponse 
 // 9. Convert response to audio using Eleven Labs.
 const convertResponseToAudioElevenLabs = async textInput => {
     const apiKey = process.env.ELEVEN_LABS_API_KEY;
-    const voiceId = "XrExE9yKIg1WjnnlVkGX";
+    const voiceId = "G5z4me8stgpsDrdfslDf";
     const fileName = `${Date.now()}.mp3`;
     console.log("Converting response to audio...");
 
@@ -247,15 +251,15 @@ const convertResponseToAudioLocal = async textInput => {
     return fileName;
 };
 
-const convertResponseToAudio = runLocal & localFlags.convertResponseToAudio ? convertResponseToAudioLocal : convertResponseToAudioOpenAI //convertResponseToAudioElevenLabs;
+const convertResponseToAudio = runLocal & localFlags.convertResponseToAudio ? convertResponseToAudioLocal :  convertResponseToAudioElevenLabs;
 
 
 const usePrompt = async text => {
     const response = await getAIResponse(text);
-    const fileName = await convertResponseToAudio(response);
-    console.log("Playing audio...");
-    await sound.play('./audio/' + fileName);
-    console.log("Playback finished...");
+    // const fileName = await convertResponseToAudio(response);
+    // console.log("Playing audio...");
+    // await sound.play('./audio/' + fileName);
+    // console.log("Playback finished...");
 }
 
 const imagePrompt = async (text) => {
@@ -296,7 +300,7 @@ const imagePrompt2 = async () => {
     // })
 }
 
-const prompt = `tell me about the lunar new year in 1 sentence`;
+const prompt = `create a horizontal scroll component that contains 10 items items.  It should have a min height of 500px and contain poster images that have an optional badge on them`;
 // usePrompt(prompt);
 // 10. Start the application and keep it alive.
 startRecordingProcess();
